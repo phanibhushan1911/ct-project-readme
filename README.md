@@ -54,7 +54,7 @@ We will separate the responsibilities into two distinct edge stations. They will
 ### Proposed Workflow Diagram
 ```mermaid
 flowchart TD
-    Box1[Box Enters Line] --> Station1
+    Box1[Box Enters Line] --> QR
     
     subgraph station_1 [Station 1: Motor and QR New]
     QR[Hardware QR Scanner] --> Ex[Extracts Serial ID]

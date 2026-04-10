@@ -56,7 +56,7 @@ We will separate the responsibilities into two distinct edge stations. They will
 flowchart TD
     Box1[Box Enters Line] --> Station1
     
-    subgraph station_1 [Station 1: Motor & QR (New)]
+    subgraph station_1 [Station 1: Motor and QR New]
     QR[Hardware QR Scanner] --> Ex[Extracts Serial ID]
     Cam1[Motor Camera AI] --> DetectMotor[Detects Fan Motor]
     Ex --> Sync1[Upload motor_inspection.json]
@@ -71,7 +71,7 @@ flowchart TD
     DetectAcc --> Sync2[Upload accessories_inspection.json]
     end
 
-    Station 1 -.- "Conveyor Belt" -.- Station 2
+    station_1 -.- "Conveyor Belt" -.- station_2
     Sync2 -- "S3 Key: /ID/accessories.json" --> S3
 
     S3 --> Dashboard[Inspection Dashboard]

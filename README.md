@@ -56,22 +56,22 @@ We will separate the responsibilities into two distinct edge stations. They will
 flowchart TD
     Box1[Box Enters Line] --> QR
     
-    subgraph station_1 [Station 1: Motor and QR New]
-    QR[Hardware QR Scanner] --> Ex[Extracts Serial ID]
-    Cam1[Motor Camera AI] --> DetectMotor[Detects Fan Motor]
-    Ex --> Sync1[Upload motor_inspection.json]
-    DetectMotor --> Sync1
+    subgraph station_1 ["Station 1: Motor and QR New"]
+        QR[Hardware QR Scanner] --> Ex[Extracts Serial ID]
+        Cam1[Motor Camera AI] --> DetectMotor[Detects Fan Motor]
+        Ex --> Sync1[Upload motor_inspection.json]
+        DetectMotor --> Sync1
     end
 
     Sync1 -- "S3 Key: /ID/motor.json" --> S3[(AWS S3 Unified Bucket)]
 
-    subgraph station_2 [Station 2: Accessories (Existing)]
-    Box2[Box Reaches Exit] --> Cam2
-    Cam2[Accessories Camera AI] --> DetectAcc[Detects Parts]
-    DetectAcc --> Sync2[Upload accessories_inspection.json]
+    subgraph station_2 ["Station 2: Accessories Existing"]
+        Box2[Box Reaches Exit] --> Cam2
+        Cam2[Accessories Camera AI] --> DetectAcc[Detects Parts]
+        DetectAcc --> Sync2[Upload accessories_inspection.json]
     end
 
-    station_1 -.- "Conveyor Belt" -.- station_2
+    station_1 -.->|"Conveyor Belt"| station_2
     Sync2 -- "S3 Key: /ID/accessories.json" --> S3
 
     S3 --> Dashboard[Inspection Dashboard]

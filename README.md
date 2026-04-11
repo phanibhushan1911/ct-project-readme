@@ -81,23 +81,127 @@ flowchart TD
 
 ---
 
-## 4. Key Implementation Steps
+## 4. The Offline Sync Challenge
+
+**The Problem:** 
+Factory internet connections can be intermittent, particularly when relying on Wi-Fi that requires workers to perform daily authenticated logins. When the cloud is unreachable, edge stations must store their inspection logs in a local database before eventually syncing to AWS. 
+
+If Station 1 and Station 2 operate entirely offline and we remove the QR scanner from Station 2 (as originally proposed), a critical issue arises: **How does Station 2 know the QR ID of the physical box it is inspecting?** Without the ID, Station 2 cannot save its local data correctly, and AWS S3 will not be able to merge the Accessories check with the Motor check when the internet is restored.
+
+To solve this, we must select one of the following three architectural approaches for local synchronization:
+
+### Approach 1: The "Dual-Scanner" Strategy (Recommended)
+Both stations are equipped with their own hardware QR scanners and operate 100% independently off their own local databases. They do not communicate with each other over the local network. 
+
+* **Pros:** Most robust. Immune to local network failures and human intervention (e.g., if a box is removed from the belt between stations).
+* **Cons:** Requires the purchase and maintenance of a second QR scanner.
+
+```mermaid
+flowchart LR
+    subgraph offline ["Offline Factory Environment"]
+        direction LR
+        Box[Fan Box]
+        
+        subgraph s1 ["Station 1 (Motor)"]
+            QR1[QR Scanner] --> DB1[(Local DB)]
+            Cam1[Motor AI] --> DB1
+        end
+        
+        subgraph s2 ["Station 2 (Accessories)"]
+            QR2[QR Scanner] --> DB2[(Local DB)]
+            Cam2[Accessory AI] --> DB2
+        end
+        
+        Box --> QR1
+        Box -. "Belt" .-> QR2
+    end
+    
+    DB1 -- "Internet\nRestored" --> S3[(AWS S3\nUnified Bucket)]
+    DB2 -- "Internet\nRestored" --> S3
+```
+
+### Approach 2: The "LAN Queue" Strategy
+We retain a single QR scanner at Station 1. When Station 1 scans a box, it sends a payload over the Local Area Network (LAN) to a queue system living on Station 2. 
+
+* **Pros:** Only requires one QR scanner.
+* **Cons:** If boxes are removed or fall off the belt between the two stations, Station 2 will assign the wrong ID to the wrong box, completely breaking analytics.
+
+```mermaid
+flowchart TD
+    subgraph LAN ["Offline Local Network (No AWS)"]
+        Box[Fan Box]
+        
+        subgraph s1 ["Station 1 (Motor)"]
+            QR1[QR Scanner: ID 123] --> DB1[(Local DB)]
+            Cam1[Motor AI] --> DB1
+        end
+        
+        s1 -- "LAN Event: Next is 123" --> Q[Station 2 Queue]
+        
+        subgraph s2 ["Station 2 (Accessories)"]
+            Q --> NextBox[Assign ID 123]
+            Cam2[Accessory AI] --> NextBox
+            NextBox --> DB2[(Local DB)]
+        end
+        
+        Box --> QR1
+        Box -. "Travels on Belt" .-> Cam2
+    end
+    
+    DB1 -- "Internet Restored" --> S3[(AWS S3 Unified Bucket)]
+    DB2 -- "Internet Restored" --> S3
+```
+
+### Approach 3: The "Shared Local Database" Strategy
+A single, centralized local database (e.g., hosted on Station 2's PC or a dedicated factory server) is used by both stations to sync data directly via the LAN. 
+
+* **Pros:** Single source of truth locally. One background service handles all AWS uploads.
+* **Cons:** Still requires a tracking mechanism (like the queue in Approach 2) if Station 2 doesn't have a scanner, and is vulnerable to LAN network crashes.
+
+```mermaid
+flowchart TD
+    subgraph LAN ["Offline Local Network"]
+        Box[Fan Box]
+        
+        subgraph s1 ["Station 1 (Motor)"]
+            QR1[QR Scanner] --> D1[Motor Payload]
+            Cam1[Motor AI] --> D1
+        end
+        
+        subgraph s2 ["Station 2 (Master / Accessories)"]
+            Cam2[Accessory AI] --> D2[Accessory Payload]
+            MasterDB[(Shared Local DB)]
+        end
+        
+        D1 -- "LAN Connection" --> MasterDB
+        D2 --> MasterDB
+        Box --> QR1
+        Box -. "Belt" .-> Cam2
+    end
+    
+    MasterDB -- "Internet Restored" --> S3[(AWS S3 Unified Bucket)]
+```
+
+---
+
+## 5. Key Implementation Steps
 
 1. **New Edge App Development (Station 1):**
    - Create a lightweight desktop app for the initial station.
    - Integrate hardware QR scanner support (via USB/Serial) to capture exact text strings rather than images.
    - Train and implement a YOLO model specifically for Fan Motor detection.
-   - Configure AWS S3 upload logic to use the extracted QR string as the primary `inspection_id`.
+   - Configure local database fallback and S3 upload logic to use the extracted QR string as the primary `inspection_id`.
 
 2. **Modify Existing App (`Ct-PlantProject`):**
-   - Remove the QR image capture logic.
+   - Update hardware (either add scanner or integrate LAN network logic based on chosen approach).
    - Update the S3 synchronization to append its results directly into the folder created/identified by Station 1.
 
 3. **Dashboard Enhancements (`ct-inspection-logs`):**
    - Modify the dashboard to pull *both* JSON files per inspection ID.
    - Design a timeline UI showing a box successfully passing Station 1 and subsequently Station 2.
 
-## 5. Strategic Benefits
+## 6. Strategic Benefits
 - **Zero Database Bottlenecks**: By continuing to use AWS S3 as the integration layer, we avoid costly RDS or DynamoDB setups.
 - **Data Accuracy**: Hard-scanning the QR code is more reliable for analytics than taking photos of it.
+- **Resilience**: Leveraging local databases ensures smooth factory operations despite captive-portal Wi-Fi issues.
 - **Traceability**: If a box fails, the dashboard will immediately show exactly *which* station it failed at, pinpointing assembly line bottlenecks.
